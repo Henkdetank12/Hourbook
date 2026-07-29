@@ -355,7 +355,50 @@
     .quick-add { width: 100%; min-height: 56px; font-size: 1rem; box-shadow: 0 12px 28px var(--quick-shadow); }
 
     .day-list { display: grid; gap: 10px; }
+
+    .day-swipe {
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--danger) 12%, var(--panel-solid));
+      touch-action: pan-y;
+    }
+
+    .day-swipe-action {
+      position: absolute;
+      inset: 0 0 0 auto;
+      width: 92px;
+      border: 0;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      background: transparent;
+      color: var(--danger);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .day-swipe-action:active {
+      transform: scale(0.96);
+    }
+
+    .day-swipe-action .cute-trash {
+      width: 28px;
+      height: 28px;
+      display: block;
+    }
+
+    .day-swipe-action .remove-label {
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
     .day-row {
+      position: relative;
+      z-index: 1;
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 12px;
@@ -369,6 +412,22 @@
       padding: 13px;
       box-shadow: inset 0 0 0 1px var(--line);
       cursor: pointer;
+      transform: translateX(0);
+      transition: transform 180ms ease;
+      will-change: transform;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .day-row.swiping {
+      transition: none;
+    }
+
+    .day-swipe.open .day-row {
+      border-radius: 18px 0 0 18px;
+      box-shadow:
+        inset 0 0 0 1px var(--line),
+        8px 0 18px rgba(0, 0, 0, 0.04);
     }
 
     .date-badge {
@@ -1730,20 +1789,161 @@
 
       for (const entry of entries) {
         const date = parseLocalDate(entry.date);
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'day-row';
-        button.dataset.entryId = entry.id;
+        const item = document.createElement('div');
+        item.className = 'day-swipe';
+        item.dataset.entryId = entry.id;
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'day-swipe-action';
+        removeButton.setAttribute('aria-label', 'Remove workday');
+        removeButton.innerHTML = `
+          <svg class="cute-trash" viewBox="0 0 48 48" aria-hidden="true">
+            <path d="M16 14.5h16" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+            <path d="M20.5 14.5V12.2c0-1.4 1.1-2.5 2.5-2.5h2c1.4 0 2.5 1.1 2.5 2.5v2.3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <path d="M18.2 16.8h11.6c1.3 0 2.3 1.1 2.2 2.4l-1.1 16.2c-.1 1.7-1.6 3-3.3 3H20.4c-1.7 0-3.2-1.3-3.3-3l-1.1-16.2c-.1-1.3.9-2.4 2.2-2.4Z" fill="currentColor" opacity=".16"/>
+            <path d="M18.2 16.8h11.6c1.3 0 2.3 1.1 2.2 2.4l-1.1 16.2c-.1 1.7-1.6 3-3.3 3H20.4c-1.7 0-3.2-1.3-3.3-3l-1.1-16.2c-.1-1.3.9-2.4 2.2-2.4Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+            <path d="M22 22.5v9.5M26 22.5v9.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="24" cy="8.2" r="1.6" fill="currentColor"/>
+          </svg>
+          <span class="remove-label">Remove</span>`;
+
+        const front = document.createElement('button');
+        front.type = 'button';
+        front.className = 'day-row';
         const note = entry.note ? escapeHtml(entry.note) : `${entry.start}–${entry.end}`;
-        button.innerHTML = `
+        front.innerHTML = `
           <div class="date-badge"><div><strong>${dayFormatter.format(date)}</strong><span>${weekdayFormatter.format(date).replace('.', '')}</span></div></div>
           <div class="day-main">
             <div class="day-title">${capitalize(fullDateFormatter.format(date))}</div>
             <div class="day-meta">${note}</div>
           </div>
           <div class="day-money">${euro.format(earningsFor(entry))}<div class="day-hours">${number2.format(hoursFor(entry))} h</div></div>`;
-        container.appendChild(button);
+
+        item.append(removeButton, front);
+        container.appendChild(item);
+        enableDaySwipe(item);
       }
+    }
+
+    const SWIPE_ACTION_WIDTH = 92;
+    let openSwipeItem = null;
+
+    function setSwipeOffset(item, offset, animate = true) {
+      const front = item.querySelector('.day-row');
+      if (!front) return;
+      const clamped = clamp(offset, -SWIPE_ACTION_WIDTH, 0);
+      front.classList.toggle('swiping', !animate);
+      front.style.transform = `translateX(${clamped}px)`;
+      item.classList.toggle('open', clamped <= -SWIPE_ACTION_WIDTH + 1);
+      if (clamped <= -SWIPE_ACTION_WIDTH + 1) openSwipeItem = item;
+      else if (openSwipeItem === item) openSwipeItem = null;
+    }
+
+    function closeOpenSwipe(except = null) {
+      document.querySelectorAll('.day-swipe.open').forEach((item) => {
+        if (item === except) return;
+        setSwipeOffset(item, 0, true);
+      });
+      if (openSwipeItem && openSwipeItem !== except) openSwipeItem = null;
+    }
+
+    function enableDaySwipe(item) {
+      const front = item.querySelector('.day-row');
+      const removeButton = item.querySelector('.day-swipe-action');
+      let startX = 0;
+      let startY = 0;
+      let startOffset = 0;
+      let currentOffset = 0;
+      let dragging = false;
+      let axisLocked = null;
+      let suppressClick = false;
+      let pointerId = null;
+
+      const getOffset = () => {
+        const match = /translateX\((-?\d+(?:\.\d+)?)px\)/.exec(front.style.transform || '');
+        return match ? Number(match[1]) : (item.classList.contains('open') ? -SWIPE_ACTION_WIDTH : 0);
+      };
+
+      const onPointerDown = (event) => {
+        if (event.button != null && event.button !== 0) return;
+        closeOpenSwipe(item);
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        startOffset = getOffset();
+        currentOffset = startOffset;
+        dragging = true;
+        axisLocked = null;
+        suppressClick = false;
+        front.setPointerCapture?.(pointerId);
+      };
+
+      const onPointerMove = (event) => {
+        if (!dragging || (pointerId != null && event.pointerId !== pointerId)) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+
+        if (!axisLocked) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          axisLocked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+          if (axisLocked === 'y') {
+            dragging = false;
+            return;
+          }
+        }
+
+        if (axisLocked !== 'x') return;
+        event.preventDefault();
+        suppressClick = true;
+        currentOffset = clamp(startOffset + dx, -SWIPE_ACTION_WIDTH, 0);
+        setSwipeOffset(item, currentOffset, false);
+      };
+
+      const finishDrag = (event) => {
+        if (!dragging || (pointerId != null && event.pointerId !== pointerId)) return;
+        dragging = false;
+        const shouldOpen = currentOffset <= -SWIPE_ACTION_WIDTH * 0.4;
+        setSwipeOffset(item, shouldOpen ? -SWIPE_ACTION_WIDTH : 0, true);
+        if (shouldOpen) {
+          closeOpenSwipe(item);
+          openSwipeItem = item;
+        }
+        pointerId = null;
+      };
+
+      front.addEventListener('pointerdown', onPointerDown);
+      front.addEventListener('pointermove', onPointerMove);
+      front.addEventListener('pointerup', finishDrag);
+      front.addEventListener('pointercancel', finishDrag);
+
+      front.addEventListener('click', (event) => {
+        if (suppressClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          suppressClick = false;
+          return;
+        }
+        if (item.classList.contains('open')) {
+          event.preventDefault();
+          event.stopPropagation();
+          setSwipeOffset(item, 0, true);
+          return;
+        }
+        const entry = state.entries.find((row) => row.id === item.dataset.entryId);
+        if (entry) openEntryModal(entry);
+      });
+
+      removeButton.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = item.dataset.entryId;
+        if (!id) return;
+        state.entries = state.entries.filter((entry) => entry.id !== id);
+        if (openSwipeItem === item) openSwipeItem = null;
+        await persistState();
+        showToast('Workday removed.');
+      });
     }
 
     function renderSettings() {
@@ -2043,10 +2243,8 @@
       el('eraseAllButton').addEventListener('click', eraseAllData);
 
       document.addEventListener('click', (event) => {
-        const row = event.target.closest('[data-entry-id]');
-        if (!row) return;
-        const entry = state.entries.find((item) => item.id === row.dataset.entryId);
-        if (entry) openEntryModal(entry);
+        if (event.target.closest('.day-swipe')) return;
+        closeOpenSwipe();
       });
 
       document.addEventListener('keydown', (event) => {

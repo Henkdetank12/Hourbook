@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hourbook-v4';
+const CACHE_NAME = 'hourbook-v5';
 const APP_FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {
