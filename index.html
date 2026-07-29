@@ -230,6 +230,11 @@
       display: flex;
       flex-direction: column;
       grid-column: 1 / -1;
+      position: relative;
+      z-index: 1;
+      background: var(--panel-solid);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
 
     .mini-cal {
@@ -238,6 +243,10 @@
       gap: 6px;
       flex: 1;
       user-select: none;
+      -webkit-user-select: none;
+      position: relative;
+      z-index: 2;
+      touch-action: manipulation;
     }
 
     .mini-cal-nav {
@@ -245,6 +254,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 4px;
+      position: relative;
+      z-index: 3;
     }
 
     .mini-cal-title {
@@ -270,7 +281,9 @@
     .mini-cal-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 1px;
+      gap: 2px;
+      position: relative;
+      z-index: 3;
     }
 
     .mini-cal-weekdays span {
@@ -281,6 +294,7 @@
       letter-spacing: 0.02em;
       text-transform: uppercase;
       padding-bottom: 2px;
+      pointer-events: none;
     }
 
     .mini-cal-day {
@@ -301,9 +315,17 @@
       color: var(--text);
       background: transparent;
       min-width: 0;
+      min-height: 32px;
       cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
+      -webkit-tap-highlight-color: rgba(232, 145, 168, 0.25);
       touch-action: manipulation;
+      position: relative;
+      z-index: 4;
+      transform: translateZ(0);
+    }
+
+    .mini-cal-day > * {
+      pointer-events: none;
     }
 
     .mini-cal-day:not(.empty):hover,
@@ -314,7 +336,8 @@
     }
 
     .mini-cal-day:not(.empty):active {
-      transform: scale(0.94);
+      transform: translateZ(0) scale(0.94);
+      background: var(--accent-soft);
     }
 
     .mini-cal-day.empty {
@@ -1743,9 +1766,41 @@
     }
 
     function openCalendarDay(iso) {
+      if (!iso) return;
       const existing = entryForDate(iso);
       if (existing) openEntryModal(existing);
       else openEntryModal(null, iso);
+    }
+
+    let lastCalendarTap = { iso: '', at: 0 };
+
+    function handleCalendarGridTap(event) {
+      const day = event.target.closest('.mini-cal-day');
+      if (!day || day.classList.contains('empty')) return;
+      const grid = el('miniCalGrid');
+      if (!grid.contains(day)) return;
+
+      const iso = day.dataset.date;
+      if (!iso) return;
+
+      const now = Date.now();
+      if (lastCalendarTap.iso === iso && now - lastCalendarTap.at < 450) {
+        event.preventDefault();
+        return;
+      }
+      lastCalendarTap = { iso, at: now };
+      openCalendarDay(iso);
+    }
+
+    function bindMiniCalendarEvents() {
+      const grid = el('miniCalGrid');
+      if (grid.dataset.bound === 'true') return;
+      grid.dataset.bound = 'true';
+      grid.addEventListener('click', handleCalendarGridTap);
+      grid.addEventListener('pointerup', (event) => {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+        handleCalendarGridTap(event);
+      });
     }
 
     function renderMiniCalendar() {
@@ -1782,7 +1837,6 @@
           'aria-label',
           worked.has(iso) ? `Edit workday ${iso}` : `Add workday ${iso}`
         );
-        cell.addEventListener('click', () => openCalendarDay(iso));
         grid.appendChild(cell);
       }
     }
@@ -2304,6 +2358,7 @@
       buildTimePickers();
       buildWeekdayPicker();
       buildThemePresetGrid();
+      bindMiniCalendarEvents();
       attachEvents();
       await loadState();
       applyTheme();
