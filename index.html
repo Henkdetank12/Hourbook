@@ -290,22 +290,46 @@
       align-items: center;
       justify-content: center;
       gap: 1px;
+      border: 0;
+      padding: 0;
+      margin: 0;
       border-radius: 7px;
+      font: inherit;
       font-size: clamp(0.58rem, 2.6vw, 0.72rem);
       font-weight: 700;
       line-height: 1;
       color: var(--text);
-      pointer-events: none;
+      background: transparent;
       min-width: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    .mini-cal-day:not(.empty):hover,
+    .mini-cal-day:not(.empty):focus-visible {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      outline: none;
+    }
+
+    .mini-cal-day:not(.empty):active {
+      transform: scale(0.94);
     }
 
     .mini-cal-day.empty {
       visibility: hidden;
+      pointer-events: none;
+      cursor: default;
     }
 
     .mini-cal-day.today {
       background: var(--accent-soft);
       color: var(--accent-strong);
+    }
+
+    .mini-cal-day.worked:not(.today) {
+      background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
     }
 
     .mini-cal-dot {
@@ -1712,6 +1736,18 @@
       return new Set(entriesForMonth(date).map((entry) => entry.date));
     }
 
+    function entryForDate(iso) {
+      return state.entries
+        .filter((entry) => entry.date === iso)
+        .sort((a, b) => a.start.localeCompare(b.start))[0] || null;
+    }
+
+    function openCalendarDay(iso) {
+      const existing = entryForDate(iso);
+      if (existing) openEntryModal(existing);
+      else openEntryModal(null, iso);
+    }
+
     function renderMiniCalendar() {
       const titleFormatter = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' });
       el('miniCalTitle').textContent = capitalize(titleFormatter.format(calendarCursor));
@@ -1735,12 +1771,18 @@
 
       for (let day = 1; day <= daysInMonth; day += 1) {
         const iso = `${year}-${pad2(month + 1)}-${pad2(day)}`;
-        const cell = document.createElement('div');
+        const cell = document.createElement('button');
+        cell.type = 'button';
         cell.className = 'mini-cal-day';
         if (iso === todayIso) cell.classList.add('today');
         if (worked.has(iso)) cell.classList.add('worked');
         cell.innerHTML = `<span>${day}</span><span class="mini-cal-dot"></span>`;
-        cell.setAttribute('aria-label', worked.has(iso) ? `${iso}, worked` : iso);
+        cell.dataset.date = iso;
+        cell.setAttribute(
+          'aria-label',
+          worked.has(iso) ? `Edit workday ${iso}` : `Add workday ${iso}`
+        );
+        cell.addEventListener('click', () => openCalendarDay(iso));
         grid.appendChild(cell);
       }
     }
