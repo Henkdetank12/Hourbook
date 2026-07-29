@@ -1,0 +1,19 @@
+{
+  "name": "HourBook",
+  "short_name": "HourBook",
+  "description": "Track work hours and estimate monthly pay.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff4f7",
+  "theme_color": "#e891a8",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
